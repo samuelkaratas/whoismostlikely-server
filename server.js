@@ -152,24 +152,19 @@ let qNumber = 0;
 io.on('connection', (socket) => {
 
 	socket.on('signin', (userData, callback) => {
-		console.log(userData);
 		db.select('*').where({ sid: userData.sid }).from('servers').then(data => {
 			if(data.length){
-				console.log('Greater than zero');
 				db('users').returning('*').insert({
 					name: userData.name,
 					sid: userData.sid
 				}).then(user => {
-					console.log(user);
 					callback(user[0]);
 				})
 				socket.join(userData.sid, () => {
 					let rooms = Object.keys(socket.rooms);
-		    		console.log(rooms[0]);
 		    		io.to(rooms[0]).emit('a new user has joined the room')
 				})
 			}else{
-				console.log('zero')
 				callback(0);
 			}
 		})
@@ -177,9 +172,7 @@ io.on('connection', (socket) => {
 
 	socket.on('adminPressedShowNextQuestion', (data) => {
 		qNumber = Math.round(Math.random() * questions.length);
-		console.log(questions[qNumber-1].question);
 		let rooms = Object.keys(socket.rooms);
-		console.log(rooms[0]);
 		db.select('*').from('users').where({ sid: data.sid }).then(data => {
 			io.to(rooms[0]).emit('question', {question: questions[qNumber].question, users: data});
 		})
@@ -187,7 +180,6 @@ io.on('connection', (socket) => {
 
 	socket.on('adminPressedShowLeaderboard', (data) => {
 		let rooms = Object.keys(socket.rooms);
-		console.log(rooms[0]);
 		db.select('selectedname', db.raw('COUNT(id)'))
 		.from('users')
 		.where({ sid: data.sid })
@@ -214,8 +206,6 @@ io.on('connection', (socket) => {
 
 	socket.on('nameSelected', (data) => {
 		let rooms = Object.keys(socket.rooms);
-		console.log(rooms[0]);
-		console.log(data.key);
 		db('users')
 		  .where({ 
 			id: data.id
@@ -261,118 +251,6 @@ io.on('connection', (socket) => {
 
 })
 
-
-
-/*
-let qNumber = 0;
-app.get('/questionNumber/:sid', (req, res) => {
-	//Selects a random number
-	//Filters the database according to the server id
-	//Changes the qid(question id) of every player that is in that server
-	qNumber = Math.round(Math.random() * questions.length);
-	db('servers')
-	  .where({ sid: req.params.sid })
-	  .update({ qid: qNumber }, ['qid'])
-	  .then(data => {
-	  	res.json(questions[data[0].qid-1].question);
-	  }).catch(err => res.status(400).json('unable to update question number'))
-})*/
-
-/*
-app.get('/question/:sid', (req, res) => {
-	//returns the scores to zero
-	//sends the question according to the qid
-	db.select('qid').from('servers').where({ sid: req.params.sid}).then(data => {
-		res.json(questions[data[0].qid-1].question);
-	}).catch(err => res.status(400).json('unable to get question'))
-})*/
-/*
-app.get('/profile/:sid', (req, res) => {
-	//returns all the users with the same sid in the url
-	db.select('*').from('users').where({ sid: req.params.sid }).then(data => {
-		res.json(data);
-	}).catch(err => res.status(400).json('unable to get users'))
-})*/
-/*
-app.get('/leaderboard/:sid', (req, res) => {
-	//returns the leaderboard. Gets the users in the same server
-	//then gets the score and stores in an array. then sorts it
-	//then pushes in the name array with the name and score
-	//NEEDS OPTIMIZATION
-	db.select('selectedname', db.raw('COUNT(id)'))
-		.from('users')
-		.where({ sid: req.params.sid })
-		.groupBy('selectedname')
-		.orderBy('count', 'desc')
-		.then(data => {
-			res.json(data);
-		}).catch(err => res.status(400).json('unable to get leaderboard'))
-})*/
-/*
-app.put('/profile/:sid/:id', (req, res) => {
-	//Gets the user with the url the gets the selected name of that user
-	//then gets the user with the same selected name then increments the score
-	db('users')
-	  .where({ 
-		sid: req.params.sid,
-		id: req.params.id
-	  })
-	  .update({ selectedname: req.body.selectedname }, ['selectedname'])
-	  .then(data => {
-	  	db('users')
-	  	  .returning('score')
-		  .where({ 
-		  	sid: req.params.sid,
-		  	name: data[0].selectedname
-		  })
-		  .increment('score')
-		  .then(data => {
-		  	res.json(data);
-		  }).catch(err => res.status(400).json('unable to update the score'))
-	  }).catch(err => res.status(400).json('unable to add the selected name'))
-})*/
-/*
-app.put('/update/:sid', (req, res) => {
-	//only the admin can access
-	//changes the is approved 
-	db('users')
-	  .where({ sid: req.params.sid })
-	  .update({ isapproved: req.body.isapproved }, ['id', 'isapproved'])
-	  .then(data => {
-	  	res.json(data);
-	  }).catch(err => res.status(400).json('unable to update is approved'))
-})
-
-app.get('/getupdate/:sid/:id', (req, res) => {
-	//returns the is approved state
-	const { sid, id } = req.params;
-	db.select('isapproved').from('users').where({
-		id: id
-	}).then(data => {
-		res.json(data[0].isapproved);
-	}).catch(err => res.status(400).json('unable to get is approved'))
-})
-
-app.put('/getupdate/:sid/:id', (req, res) => {
-	//changes the isapproved to false
-	db('users')
-	  .where({ id: req.params.id })
-	  .update({ isapproved: false }, ['id', 'isapproved'])
-	  .then(data => {
-	  	res.json(data[0].isapproved);
-	  }).catch(err => res.status(400).json('unable to update is approved to false'))
-})*/
-/*
-app.post('/signin', (req, res) => {
-	const { sid, name } = req.body;
-	db('users').returning('*').insert({
-		name: name,
-		sid: sid
-	}).then(user => {
-		res.json(user[0])
-	}).catch(err => res.status(400).json('unable to signin'))
-})*/
-
 app.post('/createParty', (req, res) => {
 	db('servers').returning('*').insert({
 		sid: req.body.sid
@@ -380,29 +258,4 @@ app.post('/createParty', (req, res) => {
 		res.json(data);
 	}).catch(err => res.status(400).json('error creating party'))
 })
-/*
-app.get('/getParty', (req, res) => {
-	db.select('*').from('servers').then(data => {
-		res.json(data);
-	}).catch(err => res.status(400).json('unable to get party'))
-})*/
-/*
-app.post('/signout', (req, res) => {
-	db('users').where({
-		id: req.body.id
-	}).del().then(data => res.json(data))
-})*/
-/*
-app.post('/deleteServer', (req, res) => {
-	//only admin can delete server
-	db('servers').where({
-		sid: req.body.sid
-	}).del().then(data => {
-		db('users').where({
-			sid: req.body.sid
-		}).del().then(data2 => res.json(data2))
-	})
-})*/
-
-
 
