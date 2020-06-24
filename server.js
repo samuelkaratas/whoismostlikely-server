@@ -1,4 +1,5 @@
 const express = require('express');
+const socketio = require('socket.io')
 const cors = require('cors');
 const app = express();
 const knex = require('knex')
@@ -15,6 +16,13 @@ const db = knex({
 
 app.use(express.json());
 app.use(cors());
+
+const expressServer = app.listen(3000, () => {
+	console.log('App is running on port 3000!');
+})
+const io = socketio(expressServer, {
+  pingTimeout: 60000,
+});
 
 //For testing
 const questions = [
@@ -141,6 +149,122 @@ const questions = [
 ]
 
 let qNumber = 0;
+io.on('connection', (socket) => {
+
+	socket.on('signin', (userData, callback) => {
+		console.log(userData);
+		db.select('*').where({ sid: userData.sid }).from('servers').then(data => {
+			if(data.length){
+				console.log('Greater than zero');
+				db('users').returning('*').insert({
+					name: userData.name,
+					sid: userData.sid
+				}).then(user => {
+					console.log(user);
+					callback(user[0]);
+				})
+				socket.join(userData.sid, () => {
+					let rooms = Object.keys(socket.rooms);
+		    		console.log(rooms[0]);
+		    		io.to(rooms[0]).emit('a new user has joined the room')
+				})
+			}else{
+				console.log('zero')
+				callback(0);
+			}
+		})
+	})
+
+	socket.on('adminPressedShowNextQuestion', (data) => {
+		qNumber = Math.round(Math.random() * questions.length);
+		console.log(questions[qNumber-1].question);
+		let rooms = Object.keys(socket.rooms);
+		console.log(rooms[0]);
+		db.select('*').from('users').where({ sid: data.sid }).then(data => {
+			io.to(rooms[0]).emit('question', {question: questions[qNumber].question, users: data});
+		})
+	})
+
+	socket.on('adminPressedShowLeaderboard', (data) => {
+		let rooms = Object.keys(socket.rooms);
+		console.log(rooms[0]);
+		db.select('selectedname', db.raw('COUNT(id)'))
+		.from('users')
+		.where({ sid: data.sid })
+		.groupBy('selectedname')
+		.orderBy('count', 'desc')
+		.then(data2 => {
+			/* SEND THE USERS WHO SELECTED THEM
+			for(let i = 0; i < data2.length; i++){
+				db.select('name').from('users').where({
+					sid: data.sid,
+					selectedname: data2[i].selectedname
+				}).then(names => {
+					//console.log('names', names);
+					for (let j = 0; j < data2[j].count ; j++) {
+						data2[i].selectedNames += names[j].name
+					}
+				})
+			}
+			//console.log('namesArray', namesArray);
+			console.log('data2', data2);*/
+			io.to(rooms[0]).emit('leaderboard', data2);
+		}).catch(err => res.status(400).json('unable to get leaderboard'))
+	})
+
+	socket.on('nameSelected', (data) => {
+		let rooms = Object.keys(socket.rooms);
+		console.log(rooms[0]);
+		console.log(data.key);
+		db('users')
+		  .where({ 
+			id: data.id
+		  })
+		  .update({ selectedname: data.key }, ['selectedname'])
+		  .then(data => {
+		  	db('users')
+		  	  .returning('score')
+			  .where({ 
+			  	//sid: req.params.sid,
+			  	name: data[0].selectedname
+			  })
+			  .increment('score')
+			  .then(data => {
+			  	io.to(rooms[0]).emit('score', data);
+			  }).catch(err => res.status(400).json('unable to update the score'))
+		  }).catch(err => res.status(400).json('unable to add the selected name'))
+	})
+
+	socket.on('deleteServer', (data) => {
+		let rooms = Object.keys(socket.rooms);
+		db('servers').where({
+			sid: data.sid
+		}).del().then(data2 => {
+			db('users').where({
+				sid: data.sid
+			}).del().then(data3 => {
+				socket.disconnect(true);
+				io.to(rooms[0]).emit('adminDisconnected');
+			})
+		})
+	})
+
+	socket.on('signout', data => {
+		let rooms = Object.keys(socket.rooms);
+		db('users').where({
+			id: data.id
+		}).del().then(data2 => {
+			socket.disconnect(true);
+			io.to(rooms[0]).emit('somebodyDisconnected', data.id);
+		})
+	})
+
+})
+
+
+
+/*
+let qNumber = 0;
 app.get('/questionNumber/:sid', (req, res) => {
 	//Selects a random number
 	//Filters the database according to the server id
@@ -152,23 +276,24 @@ app.get('/questionNumber/:sid', (req, res) => {
 	  .then(data => {
 	  	res.json(questions[data[0].qid-1].question);
 	  }).catch(err => res.status(400).json('unable to update question number'))
-})
+})*/
 
+/*
 app.get('/question/:sid', (req, res) => {
 	//returns the scores to zero
 	//sends the question according to the qid
 	db.select('qid').from('servers').where({ sid: req.params.sid}).then(data => {
 		res.json(questions[data[0].qid-1].question);
 	}).catch(err => res.status(400).json('unable to get question'))
-})
-
+})*/
+/*
 app.get('/profile/:sid', (req, res) => {
 	//returns all the users with the same sid in the url
 	db.select('*').from('users').where({ sid: req.params.sid }).then(data => {
 		res.json(data);
 	}).catch(err => res.status(400).json('unable to get users'))
-})
-
+})*/
+/*
 app.get('/leaderboard/:sid', (req, res) => {
 	//returns the leaderboard. Gets the users in the same server
 	//then gets the score and stores in an array. then sorts it
@@ -182,8 +307,8 @@ app.get('/leaderboard/:sid', (req, res) => {
 		.then(data => {
 			res.json(data);
 		}).catch(err => res.status(400).json('unable to get leaderboard'))
-})
-
+})*/
+/*
 app.put('/profile/:sid/:id', (req, res) => {
 	//Gets the user with the url the gets the selected name of that user
 	//then gets the user with the same selected name then increments the score
@@ -205,8 +330,8 @@ app.put('/profile/:sid/:id', (req, res) => {
 		  	res.json(data);
 		  }).catch(err => res.status(400).json('unable to update the score'))
 	  }).catch(err => res.status(400).json('unable to add the selected name'))
-})
-
+})*/
+/*
 app.put('/update/:sid', (req, res) => {
 	//only the admin can access
 	//changes the is approved 
@@ -236,9 +361,8 @@ app.put('/getupdate/:sid/:id', (req, res) => {
 	  .then(data => {
 	  	res.json(data[0].isapproved);
 	  }).catch(err => res.status(400).json('unable to update is approved to false'))
-})
-
-//let id1 = 9;
+})*/
+/*
 app.post('/signin', (req, res) => {
 	const { sid, name } = req.body;
 	db('users').returning('*').insert({
@@ -247,7 +371,7 @@ app.post('/signin', (req, res) => {
 	}).then(user => {
 		res.json(user[0])
 	}).catch(err => res.status(400).json('unable to signin'))
-})
+})*/
 
 app.post('/createParty', (req, res) => {
 	db('servers').returning('*').insert({
@@ -256,19 +380,19 @@ app.post('/createParty', (req, res) => {
 		res.json(data);
 	}).catch(err => res.status(400).json('error creating party'))
 })
-
+/*
 app.get('/getParty', (req, res) => {
 	db.select('*').from('servers').then(data => {
 		res.json(data);
 	}).catch(err => res.status(400).json('unable to get party'))
-})
-
+})*/
+/*
 app.post('/signout', (req, res) => {
 	db('users').where({
 		id: req.body.id
 	}).del().then(data => res.json(data))
-})
-
+})*/
+/*
 app.post('/deleteServer', (req, res) => {
 	//only admin can delete server
 	db('servers').where({
@@ -278,18 +402,7 @@ app.post('/deleteServer', (req, res) => {
 			sid: req.body.sid
 		}).del().then(data2 => res.json(data2))
 	})
-})
-
-app.listen(3000, () => {
-	console.log('App is running on port 3000!');
-})
-
-
-
-
-
-
-
+})*/
 
 
 
